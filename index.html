@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Plate Search</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <h1>License Plate Search</h1>
+
+    <form id="searchForm">
+      <label for="country">Select Country:</label>
+      <select id="country" name="country">
+        <option value="FR">France</option>
+        <option value="ES">Spain</option>
+        <option value="GB">UK</option>
+        <option value="HR">Croatia</option>
+        <option value="CZ">Czechia</option>
+        <option value="DK">Denmark</option>
+        <option value="FI">Finland</option>
+        <option value="HU">Hungary</option>
+        <option value="IS">Iceland</option>
+        <option value="LT">Lithuania</option>
+        <option value="NO">Norway</option>
+      </select>
+
+      <label for="plateInput">Enter Plate Number:</label>
+      <input type="text" id="plateInput" name="plateInput" required>
+
+      <button type="submit">Search</button>
+    </form>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    document.getElementById('searchForm').addEventListener('submit', async function (e) {
+      e.preventDefault();
+
+      const country = document.getElementById('country').value;
+      const plateRaw = document.getElementById('plateInput').value.trim();
+      const plate = plateRaw.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      const resultContainer = document.getElementById('result');
+
+      resultContainer.innerHTML = 'Searching...';
+
+      if (country === 'HR') {
+        await handleCroatiaSearch(plate, resultContainer);
+      } else if (country === 'CZ') {
+        await handleCzechiaSearch(plate, resultContainer);
+      } else if (country === 'DK') {
+        await handleDenmarkSearch(plate, resultContainer);
+      } else if (country === 'FI') {
+        await handleFinlandSearch(plate, resultContainer);
+      } else if (country === 'HU') {
+        await handleHungarySearch(plate, resultContainer);
+      } else if (country === 'IS') {
+        await handleIcelandSearch(plate, resultContainer);
+      } else if (country === 'LT') {
+        await handleLithuaniaSearch(plate, resultContainer);
+      } else if (country === 'NO') {
+        await handleNorwaySearch(plate, resultContainer);
+      } else {
+        await handleApiPlaqueSearch(country, plate, resultContainer);
+      }
+    });
+
+    async function handleApiPlaqueSearch(country, plate, container) {
+      const url = `https://api.apiplaqueimmatriculation.com/plaque?immatriculation=${plate}&token=TokenDemo2025&pays=${country}`;
+
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data && data.data) {
+          const car = data.data;
+          const combinedName = `${car.marque || ''} ${car.modele || ''} ${car.version || ''}`.trim();
+
+          let resultHTML = `
+            <div class="info-combined"><strong>${combinedName}</strong></div>
+            <div><strong>VIN:</strong> ${car.vin || 'N/A'}</div>
+          `;
+
+          if (country === 'FR') {
+            resultHTML += `<div><strong>Date 1ère Circulation (FR):</strong> ${car.date1erCir_fr || 'N/A'}</div>`;
+          }
+
+          container.innerHTML = resultHTML;
+        } else {
+          container.innerHTML = 'No data found.';
+        }
+      } catch (error) {
+        console.error(error);
+        container.innerHTML = 'Error fetching data.';
+      }
+    }
+
+    async function handleNorwaySearch(plate, container) {
+      const regnrInfoUrl = `https://regnr.info/searchquery/${plate}`;
+      container.innerHTML = `
+        <div class="info-combined">Norwegian plate lookup</div>
+        <div class="additional-link">
+          <a href="${regnrInfoUrl}" target="_blank">Click here to view details on regnr.info</a>
+        </div>
+      `;
+    }
+
+    async function handleHungarySearch(plate, container) {
+      const usernameListUrl = "https://raw.githubusercontent.com/xdTAGCLAN/PlateSpottingNL/refs/heads/main/your_output_file.txt";
+
+      try {
+        const response = await fetch(usernameListUrl);
+        const text = await response.text();
+        const usernames = text.trim().split(/\r?\n/);
+
+        for (let username of usernames) {
+          const payload = new URLSearchParams({
+            RegistrationNumber: plate,
+            username: username.trim()
+          });
+
+          try {
+            const res = await fetch("https://www.regcheck.org.uk/api/reg.asmx/CheckHungary", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: payload
+            });
+
+            const xmlText = await res.text();
+
+            // Check for specific error messages
+            if (xmlText.includes("Out of credit") || xmlText.includes("Your username is incorrect")) {
+              continue; // Try next username
+            }
+
+            // Parse the XML response
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            const vehicleJsonElement = xmlDoc.getElementsByTagName("vehicleJson")[0];
+
+            if (!vehicleJsonElement) {
+              container.innerHTML = 'Error: vehicleJson element not found.';
+              return;
+            }
+
+            const vehicleJsonText = vehicleJsonElement.textContent;
+
+            // Parse the JSON string
+            const vehicleData = JSON.parse(vehicleJsonText);
+
+            const description = vehicleData.Description || "N/A";
+            const vin = vehicleData.VechileIdentificationNumber || "N/A";
+
+            container.innerHTML = `
+              <div class="info-combined"><strong>${description}</strong></div>
+              <div><strong>VIN:</strong> ${vin}</div>
+            `;
+            return;
+
+          } catch (err) {
+            console.error(err);
+            container.innerHTML = 'Error fetching or parsing vehicle data.';
+            return;
+          }
+        }
+
+        container.innerHTML = 'No working usernames or out of credit.';
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = 'Error loading username list.';
+      }
+    }
+
+    async function handleCroatiaSearch(plate, container) {
+      const usernameListUrl = "https://raw.githubusercontent.com/xdTAGCLAN/PlateSpottingNL/refs/heads/main/your_output_file.txt";
+
+      try {
+        const response = await fetch(usernameListUrl);
+        const text = await response.text();
+        const usernames = text.trim().split(/\r?\n/);
+
+        for (let username of usernames) {
+          const payload = new URLSearchParams({
+            RegistrationNumber: plate,
+            username: username.trim()
+          });
+
+          try {
+            const res = await fetch("https://www.regcheck.org.uk/api/reg.asmx/CheckCroatia", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: payload
+            });
+
+            const xmlText = await res.text();
+
+            // Check for specific error messages
+            if (xmlText.includes("Out of credit") || xmlText.includes("Your username is incorrect")) {
+              continue; // Try next username
+            }
+
+            // Parse the XML response
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            const vehicleJsonElement = xmlDoc.getElementsByTagName("vehicleJson")[0];
+
+            if (!vehicleJsonElement) {
+              container.innerHTML = 'Error: vehicleJson element not found.';
+              return;
+            }
+
+            const vehicleJsonText = vehicleJsonElement.textContent;
+
+            // Parse the JSON string
+            const vehicleData = JSON.parse(vehicleJsonText);
+
+            const description = vehicleData.Description || "N/A";
+            const vin = vehicleData.VechileIdentificationNumber || "N/A";
+
+            container.innerHTML = `
+              <div class="info-combined"><strong>${description}</strong></div>
+              <div><strong>VIN:</strong> ${vin}</div>
+            `;
+            return;
+
+          } catch (err) {
+            console.error(err);
+            container.innerHTML = 'Error fetching or parsing vehicle data.';
+            return;
+          }
+        }
+
+        container.innerHTML = 'No working usernames or out of credit.';
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = 'Error loading username list.';
+      }
+    }
+
+    async function handleCzechiaSearch(plate, container) {
+      const usernameListUrl = "https://raw.githubusercontent.com/xdTAGCLAN/PlateSpottingNL/refs/heads/main/your_output_file.txt";
+
+      try {
+        const response = await fetch(usernameListUrl);
+        const text = await response.text();
+        const usernames = text.trim().split(/\r?\n/);
+
+        for (let username of usernames) {
+          const payload = new URLSearchParams({
+            RegistrationNumber: plate,
+            username: username.trim()
+          });
+
+          try {
+            const res = await fetch("https://www.regcheck.org.uk/api/reg.asmx/CheckCzechRepublic", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: payload
+            });
+
+            const xmlText = await res.text();
+
+            // Check for specific error messages
+            if (xmlText.includes("Out of credit") || xmlText.includes("Your username is incorrect")) {
+              continue; // Try next username
+            }
+
+            // Parse the XML response
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            const vehicleJsonElement = xmlDoc.getElementsByTagName("vehicleJson")[0];
+
+            if (!vehicleJsonElement) {
+              container.innerHTML = 'Error: vehicleJson element not found.';
+              return;
+            }
+
+            const vehicleJsonText = vehicleJsonElement.textContent;
+
+            // Parse the JSON string
+            const vehicleData = JSON.parse(vehicleJsonText);
+
+            const description = vehicleData.Description || "N/A";
+            const vin = vehicleData.VIN || "N/A";
+
+            container.innerHTML = `
+              <div class="info-combined"><strong>${description}</strong></div>
+              <div><strong>VIN:</strong> ${vin}</div>
+            `;
+            return;
+
+          } catch (err) {
+            console.error(err);
+            container.innerHTML = 'Error fetching or parsing vehicle data.';
+            return;
+          }
+        }
+
+        container.innerHTML = 'No working usernames or out of credit.';
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = 'Error loading username list.';
+      }
+    }
+
+    async function handleDenmarkSearch(plate, container) {
+      const usernameListUrl = "https://raw.githubusercontent.com/xdTAGCLAN/PlateSpottingNL/refs/heads/main/your_output_file.txt";
+
+      try {
+        const response = await fetch(usernameListUrl);
+        const text = await response.text();
+        const usernames = text.trim().split(/\r?\n/);
+
+        for (let username of usernames) {
+          const payload = new URLSearchParams({
+            RegistrationNumber: plate,
+            username: username.trim()
+          });
+
+          try {
+            const res = await fetch("https://www.regcheck.org.uk/api/reg.asmx/CheckDenmark", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: payload
+            });
+
+            const xmlText = await res.text();
+
+            // Check for specific error messages
+            if (xmlText.includes("Out of credit") || xmlText.includes("Your username is incorrect")) {
+              continue; // Try next username
+            }
+
+            // Parse the XML response
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            const vehicleJsonElement = xmlDoc.getElementsByTagName("vehicleJson")[0];
+
+            if (!vehicleJsonElement) {
+              container.innerHTML = 'Error: vehicleJson element not found.';
+              return;
+            }
+
+            const vehicleJsonText = vehicleJsonElement.textContent;
+
+            // Parse the JSON string
+            const vehicleData = JSON.parse(vehicleJsonText);
+            
+            // Extract the extended information if available
+            let extendedInfo = {};
+            try {
+              if (vehicleData.ExtendedInformation) {
+                extendedInfo = vehicleData.ExtendedInformation;
+              }
+            } catch (e) {
+              console.log("Couldn't parse extended information", e);
+            }
+
+            const description = vehicleData.Description || "N/A";
+            const registrationDate = extendedInfo.KoeretoejOplysningGrundStruktur?.KoeretoejOplysningFoersteRegistreringDato || "N/A";
+            const vin = vehicleData.VechileIdentificationNumber || "N/A";
+
+            // Add link to check previous registrations
+            const synsrapportLink = `https://www.nummerplade.net/nummerplade/${plate}.html`;
+
+            container.innerHTML = `
+              <div class="info-combined"><strong>${description}</strong></div>
+              <div><strong>First Registration Date:</strong> ${registrationDate}</div>
+              <div><strong>VIN:</strong> ${vin}</div>
+              <div class="additional-link">
+                <a href="${synsrapportLink}" target="_blank">Check for previous registrations (Synsrapport)</a>
+              </div>
+            `;
+            return;
+
+          } catch (err) {
+            console.error(err);
+            container.innerHTML = 'Error fetching or parsing vehicle data.';
+            return;
+          }
+        }
+
+        container.innerHTML = 'No working usernames or out of credit.';
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = 'Error loading username list.';
+      }
+    }
+
+    async function handleIcelandSearch(plate, container) {
+      try {
+        const url = `https://island.is/api/graphql?operationName=GetPublicVehicleSearch&variables=%7B"input"%3A%7B"search"%3A"${plate}"%7D%7D&extensions=%7B"persistedQuery"%3A%7B"version"%3A1%2C"sha256Hash"%3A"b04f6f91c746425e2b15966df336f47814b94a0642bfbf6fa3ad7bdd8d3c80e5"%7D%7D`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data && data.data && data.data.getPublicVehicleSearch) {
+          const vehicle = data.data.getPublicVehicleSearch;
+          const make = vehicle.make || "N/A";
+          const model = vehicle.vehicleCommercialName || "N/A";
+          const regDate = vehicle.firstRegDate ? new Date(vehicle.firstRegDate).toLocaleDateString() : "N/A";
+          const vin = vehicle.vin || "N/A";
+
+          container.innerHTML = `
+            <div class="info-combined"><strong>${make} ${model}</strong></div>
+            <div><strong>First Registration Date:</strong> ${regDate}</div>
+            <div><strong>VIN:</strong> ${vin}</div>
+          `;
+        } else {
+          container.innerHTML = 'No data found for this plate number.';
+        }
+      } catch (error) {
+        console.error(error);
+        container.innerHTML = 'Error fetching data from Iceland registry.';
+      }
+    }
+
+    async function handleLithuaniaSearch(plate, container) {
+      const usernameListUrl = "https://raw.githubusercontent.com/xdTAGCLAN/PlateSpottingNL/refs/heads/main/your_output_file.txt";
+
+      try {
+        const response = await fetch(usernameListUrl);
+        const text = await response.text();
+        const usernames = text.trim().split(/\r?\n/);
+
+        for (let username of usernames) {
+          const payload = new URLSearchParams({
+            RegistrationNumber: plate,
+            username: username.trim()
+          });
+
+          try {
+            const res = await fetch("https://www.regcheck.org.uk/api/reg.asmx/CheckLithuania", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: payload
+            });
+
+            const xmlText = await res.text();
+
+            // Check for specific error messages
+            if (xmlText.includes("Out of credit") || xmlText.includes("Your username is incorrect")) {
+              continue; // Try next username
+            }
+
+            // Parse the XML response
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            const vehicleJsonElement = xmlDoc.getElementsByTagName("vehicleJson")[0];
+
+            if (!vehicleJsonElement) {
+              container.innerHTML = 'Error: vehicleJson element not found.';
+              return;
+            }
+
+            const vehicleJsonText = vehicleJsonElement.textContent;
+
+            // Parse the JSON string
+            const vehicleData = JSON.parse(vehicleJsonText);
+
+            const description = vehicleData.Description || "N/A";
+            const vin = vehicleData.VIN || "N/A";
+
+            container.innerHTML = `
+              <div class="info-combined"><strong>${description}</strong></div>
+              <div><strong>VIN:</strong> ${vin}</div>
+            `;
+            return;
+
+          } catch (err) {
+            console.error(err);
+            container.innerHTML = 'Error fetching or parsing vehicle data.';
+            return;
+          }
+        }
+
+        container.innerHTML = 'No working usernames or out of credit.';
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = 'Error loading username list.';
+      }
+    }
+
+    async function handleFinlandSearch(plate, container) {
+      const usernameListUrl = "https://raw.githubusercontent.com/xdTAGCLAN/PlateSpottingNL/refs/heads/main/your_output_file.txt";
+
+      try {
+        const response = await fetch(usernameListUrl);
+        const text = await response.text();
+        const usernames = text.trim().split(/\r?\n/);
+
+        for (let username of usernames) {
+          const payload = new URLSearchParams({
+            RegistrationNumber: plate,
+            username: username.trim()
+          });
+
+          try {
+            const res = await fetch("https://www.regcheck.org.uk/api/reg.asmx/CheckFinland", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: payload
+            });
+
+            const xmlText = await res.text();
+
+            // Check for specific error messages
+            if (xmlText.includes("Out of credit") || xmlText.includes("Your username is incorrect")) {
+              continue; // Try next username
+            }
+
+            // Parse the XML response
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            const vehicleJsonElement = xmlDoc.getElementsByTagName("vehicleJson")[0];
+
+            if (!vehicleJsonElement) {
+              container.innerHTML = 'Error: vehicleJson element not found.';
+              return;
+            }
+
+            const vehicleJsonText = vehicleJsonElement.textContent;
+
+            // Parse the JSON string
+            const vehicleData = JSON.parse(vehicleJsonText);
+
+            const description = vehicleData.Description || "N/A";
+            const vin = vehicleData.VechileIdentificationNumber || "N/A";
+
+            container.innerHTML = `
+              <div class="info-combined"><strong>${description}</strong></div>
+              <div><strong>VIN:</strong> ${vin}</div>
+            `;
+            return;
+
+          } catch (err) {
+            console.error(err);
+            container.innerHTML = 'Error fetching or parsing vehicle data.';
+            return;
+          }
+        }
+
+        container.innerHTML = 'No working usernames or out of credit.';
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = 'Error loading username list.';
+      }
+    }
+  </script>
+</body>
+</html>
