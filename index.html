@@ -22,6 +22,7 @@
         <option value="IS">Iceland</option>
         <option value="LT">Lithuania</option>
         <option value="NO">Norway</option>
+        <option value="PL">Poland</option>
         <option value="ES">Spain</option>
         <option value="UK">UK</option>
       </select>
@@ -62,6 +63,8 @@
         await handleLithuaniaSearch(plate, resultContainer);
       } else if (country === 'NO') {
         await handleNorwaySearch(plate, resultContainer);
+      } else if (country === 'PL') {
+        await handlePolandSearch(plate, resultContainer);
       } else {
         await handleApiPlaqueSearch(country, plate, resultContainer);
       }
@@ -475,6 +478,76 @@
 
             container.innerHTML = `
               <div class="info-combined"><strong>${description}</strong></div>
+              <div><strong>VIN:</strong> ${vin}</div>
+            `;
+            return;
+
+          } catch (err) {
+            console.error(err);
+            container.innerHTML = 'Error fetching or parsing vehicle data.';
+            return;
+          }
+        }
+
+        container.innerHTML = 'No working usernames or out of credit.';
+      } catch (err) {
+        console.error(err);
+        container.innerHTML = 'Error loading username list.';
+      }
+    }
+
+    async function handlePolandSearch(plate, container) {
+      const usernameListUrl = "https://raw.githubusercontent.com/xdTAGCLAN/PlateSpottingNL/refs/heads/main/your_output_file.txt";
+
+      try {
+        const response = await fetch(usernameListUrl);
+        const text = await response.text();
+        const usernames = text.trim().split(/\r?\n/);
+
+        for (let username of usernames) {
+          const payload = new URLSearchParams({
+            RegistrationNumber: plate,
+            username: username.trim()
+          });
+
+          try {
+            const res = await fetch("https://www.regcheck.org.uk/api/reg.asmx/CheckPoland", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/x-www-form-urlencoded"
+              },
+              body: payload
+            });
+
+            const xmlText = await res.text();
+
+            // Check for specific error messages
+            if (xmlText.includes("Out of credit") || xmlText.includes("Your username is incorrect")) {
+              continue; // Try next username
+            }
+
+            // Parse the XML response
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+            const vehicleJsonElement = xmlDoc.getElementsByTagName("vehicleJson")[0];
+
+            if (!vehicleJsonElement) {
+              container.innerHTML = 'Error: vehicleJson element not found.';
+              return;
+            }
+
+            const vehicleJsonText = vehicleJsonElement.textContent;
+
+            // Parse the JSON string
+            const vehicleData = JSON.parse(vehicleJsonText);
+
+            const description = vehicleData.Description || "N/A";
+            const regDate = vehicleData.RegistrationDate || "N/A";
+            const vin = vehicleData.VehicleIdentificationNumber || "N/A";
+
+            container.innerHTML = `
+              <div class="info-combined"><strong>${description}</strong></div>
+              <div><strong>Registration Date:</strong> ${regDate}</div>
               <div><strong>VIN:</strong> ${vin}</div>
             `;
             return;
