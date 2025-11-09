@@ -264,28 +264,94 @@
     }
 
     async function handlePolandSearch(plate, container) {
-      const usernameListUrl = "https://raw.githubusercontent.com/xdTAGCLAN/PlateSpottingNL/refs/heads/main/your_output_file.txt";
-      try {
-        const response = await fetch(usernameListUrl);
-        const text = await response.text();
-        let usernames = shuffleArray(text.trim().split(/\r?\n/));
+  const url = "https://ck2api-direct.cuk.pl/service/ZapiszKalkulacjeOrazZgodyNaPodstawieUfg";
 
-        for (let username of usernames) {
-          const payload = new URLSearchParams({ RegistrationNumber: plate, username: username.trim() });
-          try {
-            const res = await fetch("https://www.regcheck.org.uk/api/reg.asmx/CheckPoland", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: payload });
-            const xmlText = await res.text();
-            if (xmlText.includes("Out of credit") || xmlText.includes("Your username is incorrect")) continue;
-            const parser = new DOMParser(); const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-            const vehicleJsonElement = xmlDoc.getElementsByTagName("vehicleJson")[0]; if (!vehicleJsonElement) { container.innerHTML = 'Error: vehicleJson element not found.'; return; }
-            const vehicleData = JSON.parse(vehicleJsonElement.textContent);
-            container.innerHTML = `<div class="info-combined"><strong>${vehicleData.Description || "N/A"}</strong></div><div><strong>Registration Date:</strong> ${vehicleData.RegistrationDate || "N/A"}</div><div><strong>VIN:</strong> ${vehicleData.VehicleIdentificationNumber || "N/A"}</div>`;
-            return;
-          } catch (err) { console.error(err); container.innerHTML = 'Error fetching or parsing vehicle data.'; return; }
+  const payload = {
+    "Data": {
+      "Kalkulacja": {
+        "KlauzuleDanePodstawowe": [
+          {
+            "Sekcja": -3,
+            "Id": 72,
+            "ParametrKalkulatoraId": 1021,
+            "Zaakceptowano": 1
+          }
+        ],
+        "NumerRejestracyjny": plate,
+        "DataUrodzenia": "1999-11-11",
+        "WersjaKalkulatora": "NL"
+      },
+      "AkceptacjeZgod": [
+        {
+          "Sekcja": 1,
+          "Id": 72,
+          "ParametrKalkulatoraId": 1021,
+          "Zaakceptowano": 1
+        },
+        {
+          "Sekcja": 1,
+          "PoleDocelowe": "Telefon",
+          "Id": 98,
+          "ParametrKalkulatoraId": 528
         }
-        container.innerHTML = 'No working usernames or out of credit.';
-      } catch (err) { console.error(err); container.innerHTML = 'Error loading username list.'; }
+      ]
+    },
+    "Aut": "b50787ac-1c37-4e13-b807-416834dfa1ae"
+  };
+
+  const headers = {
+    "Accept": "application/json",
+    "Content-Type": "application/json; charset=utf-8",
+    "User-Agent": "Mozilla/5.0",
+    "Referer": "https://cuk.pl"
+  };
+
+  try {
+    container.innerHTML = "Fetching data from Polish registry...";
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      container.innerHTML = `Error: ${response.status}`;
+      return;
     }
+
+    const data = await response.json();
+    const result = data?.Result?.s || {};
+
+    const make = result.Marka || "N/A";
+    const model = result.Model || "N/A";
+    const vin = result.VIN || "N/A";
+    const firstReg = result.DataPierwszejRejestracji
+      ? result.DataPierwszejRejestracji.split("T")[0]
+      : "N/A";
+    const firstRegPl = result.DataPierwszejRejestracjiWPolsce
+      ? result.DataPierwszejRejestracjiWPolsce.split("T")[0]
+      : "N/A";
+
+    // Determine if imported
+    let imported = "N/A";
+    if (firstReg !== "N/A" && firstRegPl !== "N/A") {
+      imported = firstReg !== firstRegPl ? "Yes" : "No";
+    }
+
+    container.innerHTML = `
+      <div class="info-combined"><strong>${make} ${model}</strong></div>
+      <div><strong>VIN:</strong> ${vin}</div>
+      <div><strong>First Registration:</strong> ${firstReg}</div>
+      <div><strong>First Registration in Poland:</strong> ${firstRegPl}</div>
+      <div><strong>Imported:</strong> ${imported}</div>
+    `;
+  } catch (error) {
+    console.error(error);
+    container.innerHTML = "Error fetching or parsing data.";
+  }
+}
+
 
     async function handleFinlandSearch(plate, container) {
       const usernameListUrl = "https://raw.githubusercontent.com/xdTAGCLAN/PlateSpottingNL/refs/heads/main/your_output_file.txt";
@@ -328,3 +394,4 @@
   </script>
 </body>
 </html>
+
