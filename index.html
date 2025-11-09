@@ -264,36 +264,22 @@
     }
 
     async function handlePolandSearch(plate, container) {
-  const url = "https://ck2api-direct.cuk.pl/service/ZapiszKalkulacjeOrazZgodyNaPodstawieUfg";
+  const apiUrl = "https://ck2api-direct.cuk.pl/service/ZapiszKalkulacjeOrazZgodyNaPodstawieUfg";
+  const corsProxy = "https://api.allorigins.win/raw?url=";
 
   const payload = {
     "Data": {
       "Kalkulacja": {
         "KlauzuleDanePodstawowe": [
-          {
-            "Sekcja": -3,
-            "Id": 72,
-            "ParametrKalkulatoraId": 1021,
-            "Zaakceptowano": 1
-          }
+          { "Sekcja": -3, "Id": 72, "ParametrKalkulatoraId": 1021, "Zaakceptowano": 1 }
         ],
         "NumerRejestracyjny": plate,
         "DataUrodzenia": "1999-11-11",
         "WersjaKalkulatora": "NL"
       },
       "AkceptacjeZgod": [
-        {
-          "Sekcja": 1,
-          "Id": 72,
-          "ParametrKalkulatoraId": 1021,
-          "Zaakceptowano": 1
-        },
-        {
-          "Sekcja": 1,
-          "PoleDocelowe": "Telefon",
-          "Id": 98,
-          "ParametrKalkulatoraId": 528
-        }
+        { "Sekcja": 1, "Id": 72, "ParametrKalkulatoraId": 1021, "Zaakceptowano": 1 },
+        { "Sekcja": 1, "PoleDocelowe": "Telefon", "Id": 98, "ParametrKalkulatoraId": 528 }
       ]
     },
     "Aut": "b50787ac-1c37-4e13-b807-416834dfa1ae"
@@ -306,38 +292,31 @@
     "Referer": "https://cuk.pl"
   };
 
-  try {
-    container.innerHTML = "Fetching data from Polish registry...";
+  container.innerHTML = "Fetching data from Polish registry...";
 
-    const response = await fetch(url, {
+  try {
+    // Use AllOrigins proxy to bypass CORS
+    const proxyUrl = corsProxy + encodeURIComponent(apiUrl);
+    const response = await fetch(proxyUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(payload)
     });
 
-    if (!response.ok) {
-      container.innerHTML = `Error: ${response.status}`;
-      return;
-    }
+    const text = await response.text();
 
-    const data = await response.json();
+    // Try to parse JSON safely
+    let data;
+    try { data = JSON.parse(text); } catch { throw new Error("Invalid JSON returned."); }
+
     const result = data?.Result?.s || {};
 
     const make = result.Marka || "N/A";
     const model = result.Model || "N/A";
     const vin = result.VIN || "N/A";
-    const firstReg = result.DataPierwszejRejestracji
-      ? result.DataPierwszejRejestracji.split("T")[0]
-      : "N/A";
-    const firstRegPl = result.DataPierwszejRejestracjiWPolsce
-      ? result.DataPierwszejRejestracjiWPolsce.split("T")[0]
-      : "N/A";
-
-    // Determine if imported
-    let imported = "N/A";
-    if (firstReg !== "N/A" && firstRegPl !== "N/A") {
-      imported = firstReg !== firstRegPl ? "Yes" : "No";
-    }
+    const firstReg = result.DataPierwszejRejestracji ? result.DataPierwszejRejestracji.split("T")[0] : "N/A";
+    const firstRegPl = result.DataPierwszejRejestracjiWPolsce ? result.DataPierwszejRejestracjiWPolsce.split("T")[0] : "N/A";
+    const imported = (firstReg !== "N/A" && firstRegPl !== "N/A" && firstReg !== firstRegPl) ? "Yes" : "No";
 
     container.innerHTML = `
       <div class="info-combined"><strong>${make} ${model}</strong></div>
@@ -346,11 +325,12 @@
       <div><strong>First Registration in Poland:</strong> ${firstRegPl}</div>
       <div><strong>Imported:</strong> ${imported}</div>
     `;
-  } catch (error) {
-    console.error(error);
-    container.innerHTML = "Error fetching or parsing data.";
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = "Error fetching or parsing data from proxy.";
   }
 }
+
 
 
     async function handleFinlandSearch(plate, container) {
@@ -394,4 +374,5 @@
   </script>
 </body>
 </html>
+
 
